@@ -1,0 +1,352 @@
+---
+title: "skewness and kurtosis analysis"
+author: "Johnny Zhang"
+date: "April 29, 2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+```
+
+
+## Get data into R
+
+```{r eval=TRUE}
+load("analysis20250108.RData")
+```
+
+The data are based on the analysis conducted from May 17, 2018 to Jan 6, 2025. A total of 54,867 data analysis requests were send to our server. Among them, 40,870 analyses finished successfully. The reasons for failed analyses include malformed data, incorrect parameter input, calculation error, and some other unknown reasons.
+
+We have observed that researchers may have analyzed the same data set multiple times. To avoid the redundant information, we took a liberal method to remove duplicated results. We compared the skewness, kurtosis, and their associated standard error estimates of each row of data. If they are the same, we removed the duplicated row.
+
+
+The final data set include 272,963 unique univariate measures and 18,865 unique multivariate measures.
+
+### Regarding sample size
+```{r}
+n <- multi.data.unique$n
+p <- multi.data.unique$p
+summary(n)
+summary(p)
+```
+
+We noticed the rather small sample sizes for some analysis. For example, `r sum(n<10)` studies had sample size smaller than 10 and `r sum(n<30)` studies had sample size smaller than 30. There are `r sum(n>5000)` studies with sample size greater than 5000. In this research, we excluded studies with sample size < 30 and sample size greater than 5,000. After it, we have a total of `r sum(n>29 & n<5001)` analyses left.
+
+```{r}
+multi.sub <- multi.data.unique[n > 29 & n<5001, ]
+nrow(multi.sub)
+```
+We now take a look at the basic information of the analysis. We first take a look at the number of analysis each month over time.
+
+```{r}
+multi.sub$time.group <- as.character(multi.sub$time)
+multi.sub$time.group <- substr(multi.sub$time.group, 1, 7)
+barplot(table(multi.sub$time.group))
+```
+We now take a look at the sample sizes.
+
+```{r}
+n <- multi.sub$n
+p <- multi.sub$p
+
+summary(n) ## sample size
+summary(p) ## number of variables
+
+boxplot(n)
+
+hist(n, main="Histogram of sample size", xlab="Logarithm of the sample size", nclass=20)
+
+hist(log(n), main="Histogram of sample size", xlab="Logarithm of the sample size", nclass=20)
+
+boxplot(n)
+boxplot(log(n))
+```
+
+The number of variables
+
+```{r}
+summary(p)
+boxplot(p)
+
+hist(log(p), main="Histogram of the number of variables", xlab="Logarithm of the number of variables", nclass=20)
+```
+
+```{r}
+summary(n/p)
+```
+
+We now get the percentile of the sample size and the number of variables at .01, .05, .1, .25, .5, .75, .9, .95, .99.
+
+```{r}
+np <- quantile(n, c(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
+pp <- quantile(p, c(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
+barplot(np)
+barplot(pp)
+```
+
+### Univariate skewness and kurtosis
+
+We also remove the analysis with the sample size smaller than 30, which leads to 266,934 single variables in the whole data set.
+
+```{r}
+uni.info <- uni.info[uni.info$n > 29  & uni.info$n<5001, ]
+nrow(uni.info)
+```
+
+
+#### Look at the distribution of skewness
+
+Take out the complete data for skewness and look at its distribution.
+
+```{r}
+skew.data <- uni.info$Skewness
+length(skew.data)
+
+skew.se <- uni.info$SE_skew
+skew.z <- skew.data/skew.se
+
+summary(skew.data)
+```
+
+The maximum skewness is `r max(skew.data)` and the minimum skewness is `r min(skew.data)`. Although they seemed to be large, it's possible in real data. For example, for a vector with 10,000 values, 9999 of them are 0 and one of them is 1, the skewness is about -100. If we flip the 1 and 0, the skewness is 100. Data with outlies can also lead to large skewness, e.g., `c(rnorm(10000), 500)`.
+
+```{r}
+## quantiles of skewness
+t(t(quantile(skew.data, c(0.0001, .001, .005, 0.01, .025, .05, .1, .2, .25, .3, .4, .5, .6, .7, .75, .8, .9, .95, 0.975, 0.99, .995, .999, .9999))))
+hist(skew.data, breaks = 100)
+```
+
+The skewness mostly (99.2%) lies between -5 and 5. We now take a closer look at the density of the skewness between -5 and 5.
+
+```{r}
+## we now plot the density between -5 and 5 only, 99.2% of the data
+mean(skew.data > -5 & skew.data < 5)
+
+#pdf('uni_skewness.pdf')
+hist(skew.data[skew.data > -5 & skew.data < 5], breaks=50,
+     main='', xlab='Univariate skewness', ylim=c(0, 43000))
+abline(v=quantile(skew.data, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), col='red')
+par(srt=90)
+text(quantile(skew.data, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 43000, labels=paste(c('1%', '5%', '25%', '50%', '75%', '95%', '99%'), round(quantile(skew.data, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 1), sep=': '), pos=2, offset=0.3)
+#dev.off()
+```
+
+
+Now take a look at the z-score and size of skewness.
+
+```{r}
+mean(abs(skew.z) > qnorm(0.975))
+mean(abs(skew.data) < .05)
+mean(abs(skew.data) < .1)
+mean(abs(skew.data) < .2)
+mean(abs(skew.data) < .3)
+mean(abs(skew.data) < .4)
+mean(abs(skew.data) < .5)
+```
+
+We now take a look at the association between the sample size and the skewness and Z-score.
+
+```{r}
+uni.info.selected <- uni.info[uni.info$Skewness > -5 & uni.info$Skewness < 5, ]
+
+plot(log(uni.info.selected$n), uni.info.selected$Skewness,
+     xlab='Sample size', ylab='Skewness')
+
+plot(log(uni.info.selected$n), abs(uni.info.selected$Skewness/uni.info.selected$SE_skew),
+     xlab='Sample size', ylab='Skewness - Z')
+```
+
+
+#### Look at the distribution of kurtosis
+
+The minimum sample kurtosis is -2.148 for uniform distribution. The maximum kurtosis is 4465 in our data. Data with outliers can easily have a kurtosis as big as this.
+
+```{r}
+kurt.data <- uni.info$Kurtosis
+kurt.se <- uni.info$SE_kurt
+kurt.z <- kurt.data/kurt.se
+
+length(kurt.data)
+
+summary(kurt.data)
+
+## quantiles of kurtosis
+
+t(t(quantile(kurt.data, c(0.0001, .001, .005, 0.01, .025, .05, .1, .2, .25, .3, .4, .5, .6, .7, .75, .8, .9, .95, 0.975, 0.99, .995, .999, .9999))))
+
+mean(kurt.data < 0)
+
+hist(kurt.data)
+```
+
+The majority of the kurtosis lies between -2 and 15. We now take a closer look at the density of the kurtosis between -2 and 15.
+
+```{r}
+hist.kurt <- hist(kurt.data, breaks = 100)
+
+## 
+mean(kurt.data < 15)
+hist(kurt.data[kurt.data < 15], breaks=100)
+
+pdf('uni_kurtosis.pdf')
+hist(kurt.data[kurt.data < 15], main='', xlab='Univariate kurtosis', breaks=50, ylim=c(0, 70000))
+
+abline(v=quantile(kurt.data, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), col='red')
+par(srt=90)
+text(quantile(kurt.data, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 70000, labels=paste(c('1%', '5%', '25%', '50%', '75%', '95%', '99%'), round(quantile(kurt.data, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 1), sep=': '), pos=2, offset=0.3)
+text(14, 65000, labels='99%: 22.8')
+dev.off()
+
+```
+
+
+Now take a look at the z-score for kurtosis
+
+```{r}
+mean(abs(kurt.z) > qnorm(0.975))
+```
+
+The proportion of univariate variables with  significant skewness or kurtosis
+
+```{r}
+mean(abs(skew.z) > qnorm(0.975))
+mean(abs(skew.z) > qnorm(0.975) | abs(kurt.z) > qnorm(0.975))
+```
+We now take a look at the association between the sample size and the skewness and Z-score.
+
+```{r}
+uni.info.selected <- uni.info[uni.info$Kurtosis > -2 & uni.info$Kurtosis < 15, ]
+
+plot(log(uni.info.selected$n), uni.info.selected$Kurtosis,
+     xlab='Sample size', ylab='Kurtosis')
+
+plot(log(uni.info.selected$n), uni.info.selected$Kurtosis/uni.info.selected$SE_kurt,
+     xlab='Sample size', ylab='Kurtosis')
+
+plot(skew.data, kurt.data, xlab='Skewness', ylab='Kurtosis')
+
+skew.sim <-seq(-40, 100, length=length(kurt.data))
+kurt.sim <- skew.sim^2 + 1
+lines(skew.sim, kurt.sim, col='red')
+```
+
+
+### Multivariate skewness and kurtosis
+
+Distribution of multivariate skewness. The minimum multivariate skewness is 0 and the maximum is 64947 but 97.5% of them is smaller than 2,940.
+
+```{r}
+mul.info <- multi.sub
+## skewness
+m.skew <- mul.info[, 5]
+m.skew.pvalue <- mul.info[, 7]
+
+mean(m.skew.pvalue < 0.05)
+
+summary(m.skew)
+
+## quantiles of multivariate skewness
+t(t(quantile(m.skew, c(0.0001, .001, .005, 0.01, .025, .05, .1, .2, .25, .3, .4, .5, .6, .7, .75, .8, .9, .95, 0.975, 0.99, .995, .999, .9999))))
+
+## histogram of multivariate skewness
+hist(m.skew, breaks = 50)
+hist(m.skew[m.skew < 1000], breaks = 50)
+hist(log(m.skew+0.1), main="", xlab="Logarithm of multivariate skewness", breaks = 50)
+```
+
+
+We now look at the association between multivarate skewness and the sample size and the number of variables.
+
+```{r}
+## skewness and sample size
+plot(n, m.skew, xlab='Sample size', ylab='Multivariate skewness')
+plot(log(n), log(m.skew), xlab='Log sample size', ylab='Multivariate skewness')
+
+## skewness and number of variables
+plot(p, m.skew, xlab='Number of variables', ylab='Multivariate skewness')
+plot(log(p), log(m.skew), xlab='Log number of variables', ylab='Multivariate skewness')
+plot(p, log(m.skew), xlab='Log number of variables', ylab='Multivariate skewness')
+```
+
+Other visualization of multivariate skewness.
+
+```{r}
+hist(m.skew[m.skew < 2940], main='Histogram of the multivariate skewness', xlab='Multivariate skewness')
+
+hist(log(m.skew+0.01), main='Histogram of the log multivariate skewness', xlab='Multivariate skewness')
+
+### plot of the multivariate skewness
+m.skew.old <- m.skew
+#pdf('mult_skewness.pdf')
+m.skew <- m.skew[m.skew > quantile(m.skew, .0001)]
+hist(m.skew[m.skew < 2940], main='', xlab='Multivariate skewness', breaks=50)
+par(fig=c(0.3, 1, 0.2, 1), new=TRUE, mgp=c(2, 1, 0))
+hist(log(m.skew), main='', xlab='Logarithm of Multivariate Skewness', ylab='', ylim=c(0, 2500), breaks=50)
+abline(v=quantile(log(m.skew), prob=c(.01, .05, .25, 0.5, .75, .95, .99)), col='red')
+par(srt=90)
+text(quantile(log(m.skew), prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 2500, labels=paste(c('1%', '5%', '25%', '50%', '75%', '95%', '99%'), round(quantile(m.skew, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 1), sep=': '), pos=2, offset=0.3)
+par(mgp=c(3, 1, 0))
+#dev.off()
+```
+
+
+
+Now take a look at the kurtosis
+
+```{r}
+## kurtosis
+m.kurt <- mul.info[, 8]
+m.kurt.pvalue <- mul.info[, 10]
+mean(m.kurt.pvalue < 0.05)
+
+summary(m.kurt)
+
+t(t(quantile(m.kurt, c(0.0001, .001, .005, 0.01, .025, .05, .1, .2, .25, .3, .4, .5, .6, .7, .75, .8, .9, .95, 0.975, 0.99, .995, .999, .9999))))
+
+hist(m.kurt)
+hist(log(m.kurt+0.1), main="", xlab="Logarithm of multivariate kurtness")
+```
+
+Significant multivariate skewness or kurtosis
+
+```{r}
+mean(m.skew.pvalue < 0.05 | m.kurt.pvalue < 0.05)
+```
+
+```
+plot(log(n), log(m.skew+0.1), xlab='Sample size', ylab='Skewness')
+
+plot(log(n), log(m.kurt), xlab='Sample size', ylab='Kurtosis')
+
+plot(log(m.skew+0.1), log(m.kurt), xlab='Skewness', ylab='Kurtosis')
+```
+
+
+```{r}
+
+
+### plot of the multivariate kurtosis
+#pdf('mult_kurtosis.pdf')
+hist(m.kurt[m.kurt < 7167], main='', xlab='Multivariate kurtosis', breaks=50)
+par(fig=c(0.3, 1, 0.2, 1), new=TRUE, mgp=c(2, 1, 0))
+hist(log(m.kurt), main='', xlab='Logarithm of Multivariate Kurtosis', ylab='', ylim=c(0, 2000), breaks=50)
+abline(v=quantile(log(m.kurt), prob=c(.01, .05, .25, 0.5, .75, .95, .99)), col='red')
+par(srt=90)
+text(quantile(log(m.kurt), prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 2000, labels=paste(c('1%', '5%', '25%', '50%', '75%', '95%', '99%'), round(quantile(m.kurt, prob=c(.01, .05, .25, 0.5, .75, .95, .99)), 1), sep=': '), pos=2, offset=0.3)
+par(mgp=c(3, 1, 0))
+#dev.off()
+```
+
+
+## Multivariate skewness and kurtosis for different number of variables
+
+```{r}
+summary(mul.info[, 5]/p)
+summary(m.kurt/p)
+t(t(quantile(mul.info[, 5]/p, c(0.0001, .001, .005, 0.01, .025, .05, .1, .2, .25, .3, .4, .5, .6, .7, .75, .8, .9, .95, 0.975, 0.99, .995, .999, .9999))))
+t(t(quantile(m.kurt/p, c(0.0001, .001, .005, 0.01, .025, .05, .1, .2, .25, .3, .4, .5, .6, .7, .75, .8, .9, .95, 0.975, 0.99, .995, .999, .9999))))
+
+
+```
